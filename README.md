@@ -9,6 +9,9 @@ This repo contains the dataset for [**EvUnroll: Neuromorphic events based rollin
 + **Gev-RS dataset:**  We capture GS frames from a high-speed camera, and simulate RS frames and corresponding event stream (by [V2E](https://github.com/SensorsINI/v2e)). You can download the dataset from: [[BaiduYun](https://pan.baidu.com/s/1pPOZvUPvbRshckVUbxGcJQ)][code: evun]. 
 + **Real-captured dataset:**  We collect a real testing dataset with an RS-event hybrid camera, you can download it from: [[BaiduYun](https://pan.baidu.com/s/1DojaY-iwRPiIeHQT98YEUA)][code: evun]
 
+## License
+The datasets can be freely used for research and education only. Any commercial use is strictly prohibited.
+
 ## Bibtex
 
 ```bibtex
