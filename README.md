@@ -1,6 +1,7 @@
 # EvUnroll
 
 This repo contains the dataset for [**EvUnroll: Neuromorphic events based rolling shutter image correction**](https://ci.idm.pku.edu.cn/Zhou_CVPR22a.pdf)  by Xinyu Zhou, Peiqi Duan, Yi Ma, and [Boxin Shi](https://ci.idm.pku.edu.cn/People.htm).
+The code will be released soon.
 
 ## Examples of RS correction results on Gev-RS dataset 
 ![example](/figure/RSexample.gif)
