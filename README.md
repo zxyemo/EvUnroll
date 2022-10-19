@@ -1,14 +1,69 @@
-# EvUnroll
+# EvUnroll: Neuromorphic Events based Rolling Shutter Image Correction (CVPR22)
 
-This repo contains the dataset for [**EvUnroll: Neuromorphic events based rolling shutter image correction**](https://ci.idm.pku.edu.cn/Zhou_CVPR22a.pdf)  by Xinyu Zhou, Peiqi Duan, Yi Ma, and [Boxin Shi](https://ci.idm.pku.edu.cn/People.htm).
-The code will be released soon.
+This repo contains the code and dataset for [**EvUnroll: Neuromorphic events based rolling shutter image correction**](https://ci.idm.pku.edu.cn/Zhou_CVPR22a.pdf)  by Xinyu Zhou, Peiqi Duan, Yi Ma, and [Boxin Shi](https://ci.idm.pku.edu.cn/index.htm).
 
+## Usage
+### Dependency
+```shell
+pip install -r requirements.txt
+```
+### Test
++ Download the pretrained model from [here](https://drive.google.com/file/d/1FpBbH1QJFqErZQLgo3Z0gMkY0uDwdTBv/view?usp=sharing), and put it in *trained_model/\** .
++ Change the path to the dataset in *util/config.py*.
+```
+python test.py
+```
+### Train
+The training procedure consists of three steps:
+
++ Train the synthesis module and flow module seperately.
++ Freeze the weights of above two modules, and train the fusion module.
++ Unfreeze weights of all three modules and finetune the entire network.
+
+To reprocude the training procedure, you might need to slightly modify the training code in different training steps, and 
+```
+python train.py
+``` 
+## Dataset
++ **Gev-RS dataset:**  We capture GS frames from a high-speed camera, and simulate RS frames and corresponding event stream (by [DVS-Voltmeter](https://github.com/Lynn0306/DVS-Voltmeter)). You can download the dataset from [Gev-RS](https://pan.baidu.com/s/1_tZxJBeLaznrI0UomsPh9A?pwd=evun). 
++ **Real-captured dataset:**  We collect a real testing dataset with an RS-event hybrid camera, you can download it from [RealDataset](https://pan.baidu.com/s/1tj3X6nfrZFqqNGGxXXvHMQ?pwd=evun)
+
+Gev-RS dataset follows the below directory format:
+```
+├── path_to_your_dataset_folder/
+    ├── Gev-RS/
+        ├── train/
+            ├── seq1/
+                ├── rs_blur/
+                    ├── 00000.png
+                    ......
+                ├── rs_sharp/
+                    ├── 00000.png
+                    ......
+                ├── gt/
+                    ├── 00000.png
+                    ......
+            ├── seq2/
+            ......
+        ├── test/
+            ......
+    ├── all_sequence/
+        ├── train/
+            ├── seq1.avi
+            ......
+        ├── test/
+            ......
+    ├── Gev-RS-DVS/
+        ├── train/
+            ├── seq1/
+                ├── seq1.h5
+                ├── seq1_events_viz.avi
+            ......
+        ├── test/
+            ......            
+```
 ## Examples of RS correction results on Gev-RS dataset 
 ![example](/figure/RSexample.gif)
-
-## Dataset
-+ **Gev-RS dataset:**  We capture GS frames from a high-speed camera, and simulate RS frames and corresponding event stream (by [V2E](https://github.com/SensorsINI/v2e)). You can download the dataset from: [[BaiduYun](https://pan.baidu.com/s/1pPOZvUPvbRshckVUbxGcJQ)][code: evun]. 
-+ **Real-captured dataset:**  We collect a real testing dataset with an RS-event hybrid camera, you can download it from: [[BaiduYun](https://pan.baidu.com/s/1DojaY-iwRPiIeHQT98YEUA)][code: evun]
 
 ## License
 The datasets can be freely used for research and education only. Any commercial use is strictly prohibited.
@@ -16,13 +71,14 @@ The datasets can be freely used for research and education only. Any commercial 
 ## Bibtex
 
 ```bibtex
-@inproceedings{EvUnroll_cvpr22,
-  title={EvUnroll: Neuromorphic events based rolling shutter image correction},
-  author={Zhou, Xinyu and Duan, Peiqi and Ma, Yi and Shi, Boxin},
-  booktitle={Proceedings of the IEEE/CVF conference on Computer Vision and Pattern Recognition (CVPR)},
-  year={2022}
+@InProceedings{Zhou_2022_CVPR,
+    author    = {Zhou, Xinyu and Duan, Peiqi and Ma, Yi and Shi, Boxin},
+    title     = {EvUnroll: Neuromorphic Events Based Rolling Shutter Image Correction},
+    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+    month     = {June},
+    year      = {2022},
+    pages     = {17775-17784}
 }
-
 ```
 
 ## Contact
