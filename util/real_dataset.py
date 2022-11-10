@@ -17,9 +17,8 @@ class Sequence_Real(Dataset):
         self.seq = seq_name.split('_')[0]
         self.cfg = cfg
 
-        self.fps = 20.79
-        if self.seq == '10' or self.seq == '11':
-            self.fps = 19.61
+        self.fps = cfg.fps
+        
 
         self.exposure_time = int(seq_name.split('_')[-2])
         self.delay_time= int(seq_name.split('_')[-1])
@@ -195,7 +194,7 @@ def get_dataset(cfg):
     
     seq_dataset_list = []
 
-    for seq in all_seqs[6:]:
+    for seq in all_seqs:
         if os.path.isdir(os.path.join(cfg.data_root, seq)):
             seq_dataset_list.append(Sequence_Real(cfg, seq))
     return ConcatDataset(seq_dataset_list)

@@ -11,6 +11,7 @@ initial_dictionary = {
     'test': {
         'batch_size': 1,
         'workers': 8,
+        'fps':20.79,
         'model_path': './trained_model/EvUnroll.pth',
         'result_path': 'results/real_data_nodeblur',
     },

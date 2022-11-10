@@ -5,9 +5,9 @@ This repo contains the code and dataset for [**EvUnroll: Neuromorphic events bas
 ## Examples of RS correction results on Gev-RS dataset 
 ![example](/figure/RSexample.gif)
 
-## Dataset
-+ **Gev-RS dataset:**  We capture GS frames from a high-speed camera, and simulate RS frames and corresponding event stream (by [DVS-Voltmeter](https://github.com/Lynn0306/DVS-Voltmeter)). You can download the dataset from [Gev-RS](https://pan.baidu.com/s/1_tZxJBeLaznrI0UomsPh9A?pwd=evun). 
-+ **Real-captured dataset:**  We collect a real testing dataset with an RS-event hybrid camera, you can download it from [RealDataset](https://pan.baidu.com/s/1tj3X6nfrZFqqNGGxXXvHMQ?pwd=evun)
+## Data
++ **Gev-RS dataset:**  We capture GS frames from a high-speed camera, and simulate RS frames and corresponding event stream. You can download the dataset from [Gev-RS](https://pan.baidu.com/s/1_tZxJBeLaznrI0UomsPh9A?pwd=evun). 
++ **Real data examples:**  We collect real-data examples with an RS-event hybrid camera for testing, you can download it from [RealData](https://pan.baidu.com/s/1tj3X6nfrZFqqNGGxXXvHMQ?pwd=evun)
 
 Gev-RS dataset follows the below directory format:
 ```
