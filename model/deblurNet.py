@@ -29,9 +29,7 @@ class DeblurNet(nn.Module):
             self.up_path.append(upConv(base_chs*2**i, base_chs*2**(i-1), base_chs*2**i))
 
         self.pred = nn.Conv2d(base_chs, 3, kernel_size=3, stride=1, padding=1)
-    def forward(self, inputs):
-        event = inputs['rs_events']
-        image = inputs['image']
+    def forward(self, image, event):
 
         ev = self.ev_head(event)
         img = self.img_head(image)
@@ -48,7 +46,7 @@ class DeblurNet(nn.Module):
             x = self.up_path[i](x, torch.cat([ev_downs[i], img_downs[i]], dim=1))
             #x = self.up_path[i](x, ev_downs[i], img_downs[i])
         
-        res = torch.tanh(self.pred(x))
+        res = self.pred(x)
         pred_img = image + res
         
         return pred_img

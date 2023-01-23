@@ -7,8 +7,8 @@ def get_norm(norm='none'):
         norm_layer = nn.BatchNorm2d
     elif norm == 'instance':
         norm_layer = nn.InstanceNorm2d
-    elif norm == 'gelu':
-        norm_layer = nn.GELU
+    elif norm == 'layer':
+        norm_layer = nn.LayerNorm
     elif norm == 'none':
         norm_layer = nn.Identity
     else:
@@ -154,7 +154,6 @@ class Unet(nn.Module):
             x = self.up_path[i](x, x_skip_list[i])
         x = self.pred(x)
         return x
-
 
 # From https://github.com/ndrplz/ConvLSTM_pytorch
 class ConvLSTMCell(nn.Module):

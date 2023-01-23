@@ -6,6 +6,7 @@ from model.deblurNet import DeblurNet
 from einops import rearrange,repeat
 from model.warplayer import bwarp
 
+
 class SynthesisNet(nn.Module):
     def __init__(self , cfg) -> None:
         super().__init__()
@@ -26,7 +27,6 @@ class SynthesisNet(nn.Module):
         
         ## unet with separate encoder for image and event
         self.img_head = nn.Conv2d(3, base_chs, kernel_size=3, stride=1, padding=1)
-        
         self.ev_down = nn.ModuleList()
         self.img_down = nn.ModuleList()
         self.up_path = nn.ModuleList()
@@ -45,25 +45,25 @@ class SynthesisNet(nn.Module):
             self.up_path.append(upConv(base_chs*2**i, base_chs*2**(i-1), base_chs*2**i))
 
         self.pred = nn.Conv2d(base_chs, 3, kernel_size=3, stride=1, padding=1)
-
     def forward(self, inputs):
         event = inputs['gs_events']
         image = inputs['deblur'].clone().detach()
-        
+
         ## extract features for each channel of event
         ev = rearrange(event, 'b t h w -> (b t) () h w')
         ev = self.ev_head(ev)
         ev = rearrange(ev, '(b t) c h w -> b t c h w', t=self.ev_input_dim)
         
-        batch_size = ev.shape[0]
-        chs = torch.round(inputs['timestamp']*self.ev_input_dim).long()
-        
         ## bi-directional convlstm
+        batch_size = ev.shape[0]
+        left_chs = torch.clamp(torch.ceil(inputs['timestamp']*self.ev_input_dim), min=1, max=self.ev_input_dim).long()
+        right_chs = torch.clamp(torch.floor(inputs['timestamp']*self.ev_input_dim), min=0, max=self.ev_input_dim-1).long()
+        
         lstm_f_list = []
         lstm_b_list = []
         for i in range(batch_size):
-            lstm_out_f, _ = self.convlstm_f(ev[i:i+1, :chs[i], :, :, :])
-            lstm_out_b, _ = self.convlstm_b(torch.flip(ev[i:i+1, chs[i]:, :, :, :], dims=[1]))
+            lstm_out_f, _ = self.convlstm_f(ev[i:i+1, :left_chs[i], :, :, :])
+            lstm_out_b, _ = self.convlstm_b(torch.flip(ev[i:i+1, right_chs[i]:, :, :, :], dims=[1]))
             lstm_f_list.append(lstm_out_f[0][:,-1,...])
             lstm_b_list.append(lstm_out_b[0][:,-1,...])
         
@@ -73,9 +73,9 @@ class SynthesisNet(nn.Module):
         
         ## attention with time_map to extract rolling shutter information
         ev = self.time_attention(lstm_bi, torch.cat([image, inputs['time_map']], dim=1))
-
-        ## unet to predict residual image
         ev = self.ev_conv(ev)
+        
+        ## unet to predict residual image
         img = self.img_head(image)
         ev_downs = []
         img_downs = []
@@ -89,7 +89,7 @@ class SynthesisNet(nn.Module):
         for i in range(self.depth-1, -1, -1):
             x = self.up_path[i](x, torch.cat([ev_downs[i], img_downs[i]], dim=1))
             
-        res = torch.tanh(self.pred(x))
+        res = self.pred(x)
         pred_img = image + res
         
         return pred_img
@@ -102,6 +102,7 @@ class FlowNet(nn.Module):
         self.gs2gs_net = Unet(in_ch=cfg.voxel_grid_channel, out_ch=4, base_chs=base_chs, depth=self.depth)
         self.gs2rs_net = Unet(in_ch=3*3+2*3, out_ch=2, base_chs=base_chs, depth=self.depth)
     def forward(self, inputs):
+        eposilon = 1e-4
         image = inputs['deblur'].clone().detach()
         event = inputs['events_split']
         timestamp = inputs['timestamp'].to(image.device)
@@ -117,8 +118,8 @@ class FlowNet(nn.Module):
         timestamp = repeat(timestamp, 'b -> b () () ()').to(torch.float32)
 
         ## approximate the unrolling flow map
-        gs2rs_flow_t0 = gsflow_t0 * (- target_distance) / timestamp
-        gs2rs_flow_t1 = gsflow_t1 * target_distance / (1 - timestamp)
+        gs2rs_flow_t0 = gsflow_t0 * (- target_distance) / (timestamp + eposilon)
+        gs2rs_flow_t1 = gsflow_t1 * target_distance / (1 - timestamp + eposilon)
         
         warped_im_t0 = bwarp(image, gs2rs_flow_t0)
         warped_im_t1 = bwarp(image, gs2rs_flow_t1)
@@ -150,36 +151,40 @@ class EvUnrollNet(nn.Module):
     ## freeze part of the network
     ## modify the freeze() and foreard() function to different part the network
     def freeze(self):
-        for param in self.deblut_net.parameters():
-            param.requires_grad = False
-        for param in self.synthesis_net.parameters():
-            param.requires_grad = False
-        for param in self.flow_net.parameters():
-            param.requires_grad = False
+        # for param in self.deblut_net.parameters():
+        #     param.requires_grad = False
+        # for param in self.synthesis_net.parameters():
+        #     param.requires_grad = False
+        # for param in self.flow_net.parameters():
+        #     param.requires_grad = False
+        return
 
     def forward(self, inputs, deblur_first = True):
         if deblur_first:
-            deblur_img = torch.clamp(self.deblut_net(inputs), 0 ,1)
+            deblur_img = torch.clamp(self.deblut_net(inputs['image'], inputs['rs_events']), 0 ,1)
             inputs['deblur'] = deblur_img
         else:
             ## use the input image as the deblurred image
-            inputs['deblur'] = inputs['image']
+            deblur_img = inputs['image']
+            inputs['deblur'] = deblur_img  
+        outputs = {
+            'deblur': deblur_img,
+        }
         
         pred_syn = self.synthesis_net(inputs)
         pred_syn = torch.clamp(pred_syn, 0, 1)
-        output = {
-            'pred_syn': pred_syn,
-            'deblur': inputs['deblur'],
-        }
-        flow_output = self.flow_net(inputs)
-        output.update(flow_output)
+        outputs['pred_syn'] = pred_syn
+        
+        flow_outputs = self.flow_net(inputs)
+        outputs.update(flow_outputs)
 
-        fusion_input = torch.cat([inputs['gs_events'], output['deblur'],output['pred_syn'] ,output['pred_warped'], output['gs2rs_flow'],inputs['time_map']], dim=1)
+        fusion_input = torch.cat([inputs['gs_events'], outputs['deblur'],outputs['pred_syn'] ,outputs['pred_warped'], outputs['gs2rs_flow'],inputs['time_map']], dim=1)
         tmp = self.fusion_net(fusion_input)
         mask = torch.sigmoid(tmp[:,0:1,...])
         res = tmp[:,1:4,...]
-        output['pred'] = mask * output['pred_syn'] + (1-mask) * output['pred_warped'] + res
-        return output
+        outputs['pred'] = mask * outputs['pred_syn'] + (1-mask) * outputs['pred_warped'] + res
+        
+        return outputs
 
     def weight_init(self):
         for m in self.modules():

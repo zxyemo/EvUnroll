@@ -11,16 +11,14 @@ initial_dictionary = {
     'test': {
         'batch_size': 1,
         'workers': 8,
-        'fps':20.79,
-        'model_path': './trained_model/EvUnroll.pth',
+        'model_path': './trained_model/EvUnroll_pretrained.pth',
         'result_path': 'results/real_data_nodeblur',
     },
     'test_dataset':{
         'data_root': '/home/zhouxinyu/dataset/EvUnroll/evunroll_realdata',
         'voxel_grid_channel':16,
         'mode':'test',
-        'gt_fps': 5000,
-        'interval_length': 100,
+        'fps':20.79,
     },
 }
 

@@ -10,9 +10,9 @@ initial_dictionary = {
     },
     'train': {
         'batch_size': 8,
-        'val_batch_size': 4,
+        'val_batch_size': 1,
         'max_epoch': 50,
-        'lr': 2e-4,
+        'lr': 1e-4,
         'workers': 12,
         'ckp_path': 'checkpoints/fusion',
         'resume_path': None,
@@ -26,7 +26,7 @@ initial_dictionary = {
     'test': {
         'batch_size': 4,
         'workers': 8,
-        'model_path': './trained_model/EvUnroll.pth',
+        'model_path': './trained_model/EvUnroll_pretrained.pth',
         'result_path': 'results/test',
     },
     'train_dataset':{
@@ -49,7 +49,6 @@ initial_dictionary = {
         'gt_fps': 5000,
         'interval_length': 100,
     },
-
 }
 
 cfg = config_dict.ConfigDict(initial_dictionary)

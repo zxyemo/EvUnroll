@@ -51,7 +51,7 @@ Gev-RS dataset follows the below directory format:
 pip install -r requirements.txt
 ```
 ### Test
-+ Put the pretrained model in *trained_model/\** .
++ Put the [pretrained model](https://drive.google.com/file/d/1NKMIxy9qhtAsMPaXfoJgGwE0LA6MVeHV/view?usp=sharing) in *trained_model/\** .
 + Change the path to the dataset in *util/config.py*.
 ```
 python test.py

@@ -39,10 +39,11 @@ class Sequence(Dataset):
         self.event_file = os.path.join(cfg.event_root, self.seq, f'{self.seq}.h5')
 
         self.gt_list = sorted(os.listdir(self.all_gt_folder))
-        self.num_input= len(os.listdir(self.img_folder))
-
+        self.input_list= sorted(os.listdir(self.img_folder))
+        self.num_input = len(self.input_list)
+        
         self.crop_size = cfg.crop_size
-        im0 = cv2.imread(os.path.join(self.img_folder, '00000.png'))
+        im0 = cv2.imread(os.path.join(self.img_folder, self.input_list[0]))
         self.height,self.width,_ = im0.shape
         self.outsize = self.crop_size if self.mode == 'train' else (self.width, self.height)
         
@@ -51,8 +52,7 @@ class Sequence(Dataset):
         self.h5_file = None
         with h5py.File(self.event_file, 'r') as f:
             img_to_idx = f['img_to_idx']
-            self.ev_idx = np.stack([img_to_idx[::self.interval_length][:self.num_input], img_to_idx[self.rs_length -1::self.interval_length]], axis=1)
-
+            self.ev_idx = np.stack([img_to_idx[::self.interval_length][:self.num_input], img_to_idx[self.rs_length -1::self.interval_length][:self.num_input]], axis=1)
 
         self._finalizer = weakref.finalize(self, self.close_callback, self.h5_file)
 
@@ -60,7 +60,8 @@ class Sequence(Dataset):
         self.mode = mode
         self.outsize = self.crop_size if self.mode == 'train' else (self.width, self.height)
 
-    def get_rs_voxel_grid(self, sample):
+    def events_to_rs_voxel_grid(self, sample):
+        
         width, height = self.outsize
         event = sample['event']
 
@@ -93,8 +94,9 @@ class Sequence(Dataset):
         right_time = self.whole_time * (1 - sample['timestamp'])
         left_idx = et < left_time
         right_idx = et >= left_time
-        ch_l = (et[left_idx]/left_time * split_channel).long()
-        ch_r = ((et[right_idx] - left_time)/right_time * split_channel).long()
+        eposilon = 1e-4
+        ch_l = (et[left_idx]/(left_time + eposilon) * split_channel).long()
+        ch_r = ((et[right_idx] - left_time)/(right_time + eposilon) * split_channel).long()
         ch_l = torch.clamp(ch_l, 0, split_channel-1)
         ch_r = torch.clamp(ch_r, 0, split_channel-1)
         events_split_l.index_put_((ch_l,ey[left_idx],ex[left_idx]), ep[left_idx], accumulate=True)
@@ -170,15 +172,16 @@ class Sequence(Dataset):
             self.events = self.h5_file['events']
             self.img_to_idx = self.h5_file['img_to_idx']
 
-        img_input = cv2.cvtColor(cv2.imread(os.path.join(self.img_folder, f'{index:05d}.png')), cv2.COLOR_BGR2RGB)
-        rs_sharp_img = cv2.cvtColor(cv2.imread(os.path.join(self.rs_sharp_folder, f'{index:05d}.png')), cv2.COLOR_BGR2RGB)
-        event_input = self.events[self.ev_idx[index,0]:self.ev_idx[index,1],:].astype(np.int32)
+        img_input = cv2.cvtColor(cv2.imread(os.path.join(self.img_folder, self.input_list[index])), cv2.COLOR_BGR2RGB)
+        rs_sharp_img = cv2.cvtColor(cv2.imread(os.path.join(self.rs_sharp_folder, self.input_list[index])), cv2.COLOR_BGR2RGB)
+        event_input = self.events[self.ev_idx[index,0]:self.ev_idx[index,1],:].copy().astype(np.int32)
         event_input[:,0] = event_input[:,0] - self.interval_time * index
         #event_input = np.load(os.path.join(self.event_folder, f'{index:05d}.npz'))['event']
 
         h,w,_ = img_input.shape
         if self.mode == 'train':
-            timestamp = np.random.randint(1,self.voxel_grid_channel)/self.voxel_grid_channel
+            #timestamp = np.random.uniform(1/self.voxel_grid_channel, 1 - 1/self.voxel_grid_channel)
+            timestamp = np.random.uniform(0, 1)
         else:
             timestamp = 0.5
         gt_idx = index * self.interval_length + int(timestamp * self.rs_length)
@@ -205,187 +208,17 @@ class Sequence(Dataset):
         sample['rs_sharp'] = torch.from_numpy(sample['rs_sharp'].copy()).permute(2,0,1).float()/255
         sample['time_map'] = sample['time_map'].permute(2,0,1)
 
-        sample = self.get_rs_voxel_grid(sample)
+        sample = self.events_to_rs_voxel_grid(sample)
         del sample['event']
         return sample
 
-
-class Sequence_video(Dataset):
-    def __init__(self, cfg, seq_name):
-        
-        self.seq_name = seq_name
-        self.seq = seq_name[:seq_name.rfind('_',0,seq_name.rfind('_'))]
-        self.cfg = cfg
-        self.mode = cfg.mode
-
-        self.gt_fps = cfg.gt_fps
-
-        self.blur_length = int(seq_name.split('_')[-1])
-        self.rs_delay_length= int(seq_name.split('_')[-2])
-        self.rs_length = self.rs_delay_length + self.blur_length - 1
-        self.interval_length = cfg.interval_length
-
-        self.delay_time = int(self.rs_delay_length * 1e6/self.gt_fps)
-        self.whole_time = int((self.rs_length -1) * 1e6/self.gt_fps)
-        self.exposure_time = int((self.blur_length -1) * 1e6/self.gt_fps)
-        self.interval_time = int(self.interval_length * 1e6/self.gt_fps)
-
-        self.img_folder = os.path.join(cfg.img_root, seq_name, 'rs_blur')
-        self.mid_gt_folder = os.path.join(cfg.img_root, seq_name, 'gt')
-        self.rs_sharp_folder = os.path.join(cfg.img_root, seq_name, 'rs_sharp')
-        
-        self.all_gt_folder = os.path.join(cfg.gt_root, self.seq)
-
-        self.event_file = os.path.join(cfg.event_root, self.seq, f'{self.seq}.h5')
-
-        self.gt_list = sorted(os.listdir(self.all_gt_folder))
-        self.num_input= len(os.listdir(self.img_folder))
-
-        self.crop_size = cfg.crop_size
-        im0 = cv2.imread(os.path.join(self.img_folder, '00000.png'))
-        self.height,self.width,_ = im0.shape
-        self.outsize = self.crop_size if self.mode == 'train' else (self.width, self.height)
-        
-        self.voxel_grid_channel = cfg.voxel_grid_channel
-
-        self.h5_file = None
-        with h5py.File(self.event_file, 'r') as f:
-            img_to_idx = f['img_to_idx']
-            self.ev_idx = np.stack([img_to_idx[::self.interval_length][:self.num_input], img_to_idx[self.rs_length -1::self.interval_length]], axis=1)
-
-        self._finalizer = weakref.finalize(self, self.close_callback, self.h5_file)
-
-
-    def get_rs_voxel_grid(self, sample):
-        width, height = self.outsize
-        event = sample['event']
-
-        delay = float(self.delay_time) / self.height
-        et = event[:,0].to(torch.float32)
-        ex = event[:,1].long()
-        ey = event[:,2].long()
-        ep = event[:,3].to(torch.float32)
-        ep[ep == 0] = -1
-        
-        gs_ch = (et/self.whole_time * self.voxel_grid_channel).long()
-        rs_ch = ((et-ey*delay)/self.exposure_time * self.voxel_grid_channel).long()
-        
-        gs_events = torch.zeros((self.voxel_grid_channel, height, width), dtype=torch.float32)
-        rs_events = torch.zeros((self.voxel_grid_channel, height, width), dtype=torch.float32)
-        
-        gs_valid = (gs_ch >= 0) & (gs_ch < self.voxel_grid_channel)
-        rs_valid = (rs_ch >= 0) & (rs_ch < self.voxel_grid_channel)
-
-        gs_events.index_put_((gs_ch[gs_valid],ey[gs_valid],ex[gs_valid]), ep[gs_valid], accumulate=True)
-        rs_events.index_put_((rs_ch[rs_valid],ey[rs_valid],ex[rs_valid]), ep[rs_valid], accumulate=True)
-        
-        sample['gs_events'] = gs_events
-        sample['rs_events'] = rs_events
-
-        ## get event frame splited at target timestamp ts
-        split_channel = self.voxel_grid_channel//2
-        split_list = []
-        for i in range(sample['timestamp'].shape[0]):
-            events_split_l = torch.zeros((split_channel, height, width), dtype=torch.float32)
-            events_split_r = torch.zeros((split_channel, height, width), dtype=torch.float32)
-            left_time = self.whole_time * sample['timestamp'][i] 
-            right_time = self.whole_time * (1 - sample['timestamp'][i])
-            left_idx = et < left_time
-            right_idx = et >= left_time
-            ch_l = (et[left_idx]/left_time * split_channel).long()
-            ch_r = ((et[right_idx] - left_time)/right_time * split_channel).long()
-            ch_l = torch.clamp(ch_l, 0, split_channel-1)
-            ch_r = torch.clamp(ch_r, 0, split_channel-1)
-            events_split_l.index_put_((ch_l,ey[left_idx],ex[left_idx]), ep[left_idx], accumulate=True)
-            events_split_r.index_put_((ch_r,ey[right_idx],ex[right_idx]), ep[right_idx], accumulate=True)
-
-            split_list.append(torch.cat([events_split_l, events_split_r], dim=0))
-            
-        sample['events_split'] = torch.stack(split_list, dim=0)
-        return sample
-
-    @staticmethod
-    def close_callback(h5f):
-        if h5f is not None:
-            h5f.close()
-
-    def __len__(self):
-        return self.num_input
-
-    def get_timemap(self, sample):
-        time_map_list = []
-        for i in range(sample['timestamp'].shape[0]):
-            t = sample['timestamp'][i]
-            row_stamp = torch.arange(self.height, dtype=torch.float32)/(self.height - 1)*self.rs_delay_length/self.rs_length + self.blur_length /(2 * self.rs_length)
-            target_dis = row_stamp - t
-            
-            time_map = torch.stack([row_stamp, target_dis], dim=1)
-            time_map = repeat(time_map, 'h c-> h w c', w = self.width)
-            
-            time_map_list.append(time_map)
-        sample['time_map'] = torch.stack(time_map_list, dim=0)
-        return sample
-
-    def __getitem__(self, index):
-        if self.h5_file is None:
-            self.h5_file = h5py.File(self.event_file, 'r')
-            self.events = self.h5_file['events']
-            self.img_to_idx = self.h5_file['img_to_idx']
-
-        img_input = cv2.cvtColor(cv2.imread(os.path.join(self.img_folder, f'{index:05d}.png')), cv2.COLOR_BGR2RGB)
-        rs_sharp_img = cv2.cvtColor(cv2.imread(os.path.join(self.rs_sharp_folder, f'{index:05d}.png')), cv2.COLOR_BGR2RGB)
-        event_input = self.events[self.ev_idx[index,0]:self.ev_idx[index,1],:].astype(np.int32)
-        event_input[:,0] = event_input[:,0] - self.interval_time * index
-        
-        h,w,_ = img_input.shape
-
-        # modify target timestamp to get different hfr video 
-        timestamp = torch.arange(1,self.voxel_grid_channel, dtype=torch.float32)/self.voxel_grid_channel
-
-        num_output = timestamp.shape[0]
-
-        gt_list = []
-        for i in range(num_output):
-            gt_idx = index * self.interval_length + int(timestamp[i] * self.rs_length)
-            gt_img = cv2.cvtColor(cv2.imread(os.path.join(self.all_gt_folder, self.gt_list[gt_idx])), cv2.COLOR_BGR2RGB)
-            gt_img = cv2.resize(gt_img, (w,h), interpolation=cv2.INTER_LINEAR)
-            gt_list.append(gt_img)
-        
-        gt_img_all = np.stack(gt_list, axis=0)
-
-        sample = {
-            'image': img_input,
-            'rs_sharp': rs_sharp_img,
-            'gt': gt_img_all,
-            'event': event_input,
-            'timestamp': timestamp,
-            'seq_name':self.seq_name,
-            'frame_id':index, 
-        }
-        
-        sample = self.get_timemap(sample)
-        
-        sample['event'] = torch.from_numpy(sample['event'])
-        sample['image'] = torch.from_numpy(sample['image'].copy()).permute(2,0,1).float()/255
-        sample['gt'] = torch.from_numpy(sample['gt'].copy()).permute(0,3,1,2).float()/255
-        sample['rs_sharp'] = torch.from_numpy(sample['rs_sharp'].copy()).permute(2,0,1).float()/255
-        sample['time_map'] = sample['time_map'].permute(0,3,1,2)
-
-        sample = self.get_rs_voxel_grid(sample)
-        del sample['event']
-        return sample
-
-
-def get_dataset(cfg, is_video=False):
+def get_dataset(cfg):
     all_seqs = os.listdir(cfg.img_root)
     all_seqs.sort()
     
     seq_dataset_list = []
 
     for seq in all_seqs:
-        if is_video:
-            seq_dataset_list.append(Sequence_video(cfg, seq))
-        else:
-            seq_dataset_list.append(Sequence(cfg, seq))
+        seq_dataset_list.append(Sequence(cfg, seq))
     return ConcatDataset(seq_dataset_list)
 

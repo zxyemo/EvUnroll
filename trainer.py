@@ -65,7 +65,6 @@ class Trainer:
         os.makedirs(self.ckp_path, exist_ok=True)
         
     def train(self,):
-        #self.evaluate(step=0)
         for epoch in range(self.start_epoch, self.train_cfg.max_epoch):
             self.model.train()
             total_loss = 0
@@ -134,7 +133,7 @@ class Trainer:
                         #psnr = -10 * math.log10(torch.mean((gt[j] - pred[j]) * (gt[j] - pred[j])).cpu().data)
                         psnr_list.append(psnr)
 
-                    pbar.set_postfix({'psnr': np.array(psnr_list[-batch_size:]).mean()})
+                    pbar.set_postfix({'psnr': np.array(psnr_list[-batch_size:]).mean(), 'total_psnr': np.array(psnr_list).mean()})
                     pbar.update(1)
                     
                     if index % self.train_cfg.log_freq == 1:
@@ -145,7 +144,7 @@ class Trainer:
                         pred_warped_img = (pred_warped[0]*255).astype('uint8')
                         deblur_img = (deblur[0]*255).astype('uint8')
                         flow_viz_img = flow_to_color(flow[0])
-                        ev_img = (viz_event(event_frame[0,8]) * 255).astype('uint8')
+                        ev_img = (viz_event(event_frame[0,0]) * 255).astype('uint8')
                         imgs = np.concatenate([rs_blur_img, gt_img, pred_img, pred_syn_img, pred_warped_img, flow_viz_img, deblur_img, ev_img], axis=1)
                         self.writer_val.add_image(f'val_image_epoch{epoch}', imgs, index, dataformats='HWC')
         self.writer_val.add_scalar('psnr', np.array(psnr_list).mean(), epoch)
@@ -155,16 +154,16 @@ class Trainer:
 
         l1_loss = self.L1_Loss(outputs['pred'], inputs['gt'])
         perceptual_loss = self.perc_Loss(outputs['pred'], inputs['gt'], normalize=True).mean()
-        syn_l1_loss = self.L1_Loss(outputs['pred_syn'], inputs['gt'])
-        flow_l1_loss = self.L1_Loss(outputs['pred_warped'], inputs['gt'])
-        loss_G =  l1_loss + self.train_cfg.perceptual_loss_weight * perceptual_loss + 0.5*(syn_l1_loss + flow_l1_loss)
+        syn_loss = self.L1_Loss(outputs['pred_syn'], inputs['gt']) + + self.train_cfg.perceptual_loss_weight * self.perc_Loss(outputs['pred_syn'], inputs['gt'], normalize=True).mean()
+        flow_loss = self.L1_Loss(outputs['pred_warped'], inputs['gt']) + self.train_cfg.flow_loss_weight * self.Smooth_Loss(outputs['gs2rs_flow'], inputs['gt'])
+        loss_G =  l1_loss + self.train_cfg.perceptual_loss_weight * perceptual_loss + 0.3*(syn_loss + flow_loss)
                     
         if step % self.train_cfg.log_freq == 1:
             self.writer.add_scalar('loss', loss_G.item(), step)
             self.writer.add_scalar('l1_loss', l1_loss.item(), step)
             self.writer.add_scalar('perceptual_loss', perceptual_loss.item(), step)
-            self.writer.add_scalar('syn_l1_loss', syn_l1_loss.item(), step)
-            self.writer.add_scalar('flow_l1_loss', flow_l1_loss.item(), step)
+            self.writer.add_scalar('syn_loss', syn_loss.item(), step)
+            self.writer.add_scalar('flow_loss', flow_loss.item(), step)
             self.writer.add_scalar('lr', self.optimizer.param_groups[0]['lr'], step) 
 
         return loss_G
@@ -206,8 +205,6 @@ class Trainer:
 
             print(f'Loaded checkpoint {self.train_cfg.resume_path} (epoch {self.start_epoch})')
         else:
-            # checkpoint = torch.load('checkpoints/fusion_final/2022-10-17_09-38-18/048.pth')
-            # self.model.load_state_dict(checkpoint['model'], strict=False)
             self.start_epoch = 0
             self.step = 0
         return
